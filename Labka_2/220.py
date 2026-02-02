@@ -1,4 +1,4 @@
-# ?: dictionary
+# ?:
 import sys
 input = sys.stdin.readline
 n = int(input())
@@ -6,16 +6,16 @@ db = {}
 out = []
 
 for _ in range(n):
-    line = input().rstrip('\n')
+    l = input().rstrip('\n')
 
-    if line.startswith("set"):
-        parts = line.split(maxsplit=2)
-        key = parts[1]
-        value = parts[2] if len(parts) == 3 else ""
-        db[key] = value
+    if l.startswith("set"):
+        p = l.split(maxsplit=2)
+        key = p[1]
+        v = p[2] if len(p) == 3 else ""
+        db[key] = v
 
-    else:  # get
-        key = line.split()[1]
+    else:  
+        key = l.split()[1]
         if key in db:
             out.append(db[key])
         else:
