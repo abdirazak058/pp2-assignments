@@ -12,7 +12,7 @@ for i in range(n):
     else:
         d[x] = v
 
-#print(d)
+  #print(d)
 
 for i in sorted(d):
     print(i, d[i])

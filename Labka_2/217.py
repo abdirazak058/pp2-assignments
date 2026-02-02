@@ -4,7 +4,7 @@ arr = []
 cout = 0
 for i in range(n):
     arr.append(input())
-                                   #print(*arr)
+                                     #print(*arr)
 for i in range(n):
     bir = 0
     for j in range(n):
