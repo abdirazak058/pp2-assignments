@@ -1,5 +1,5 @@
 s = input().strip()
-to_digit = {
+to_san = {
     "ZER": "0",
     "ONE": "1", 
     "TWO": "2", 
@@ -11,7 +11,7 @@ to_digit = {
     "EIG": "8", 
     "NIN": "9"
 }
-to_soz = {v: k for k, v in to_digit.items()}
+to_soz = {v: k for k, v in to_san.items()}
 
 for i in ['+', '-', '*']:
     if i in s:
@@ -20,13 +20,13 @@ for i in ['+', '-', '*']:
         break
 
 def soz_to_san(word):
-    digits = ""
+    saan = ""
     i = 0
     while i < len(word):
         part = word[i:i+3]
-        digits += to_digit[part]
+        saan += to_san[part]
         i += 3
-    return int(digits)
+    return int(saan)
 
 
 a = soz_to_san(left)
