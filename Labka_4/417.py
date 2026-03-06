@@ -27,6 +27,6 @@ else:
     if t_start >= t_end:
         length = 0.0
     else:
-        length = math.hypot(dx, dy) * (t_end - t_start)
+        length = math.hypot(dx, dy) * (t_end - t_start)  # Пифагор
 
-    print(f"{length:.10f}")
+    print(f"{length:.10f}") 

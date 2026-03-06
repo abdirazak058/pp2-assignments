@@ -1,4 +1,4 @@
-#Reverse Iterator (Көтінен керсінше)
+#Reverse Iterator 
 def reverse(n):
     yield n[::-1]
     

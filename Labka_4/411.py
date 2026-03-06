@@ -1,6 +1,6 @@
 #JSON Patch Update (Мандерин озгертеди НОН бол алып баск аболса озгертеди!)
 
-import json
+import json #JavaScript Object Notation
 
 def a_p(s, p):
     for key, value in p.items():

@@ -14,6 +14,6 @@ for _ in range(m):
         g += value
     elif scope == "nonlocal":
         n += value
-    # local — ничего не делаем
+    
 
 print(g, n)
