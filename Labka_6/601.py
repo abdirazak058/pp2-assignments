@@ -8,6 +8,6 @@ def sums (arr):
     return total
 
 a = int(input())
-arr = list(map(int,input().split())) # map(функция, тізім!) тізімдегі әр әлеметке жеке жеке функция колданат!
+arr = list(map(int,input().split())) # map(функция, тізім!) Тізімдегі әр әлеметке жеке жеке функция қолданат!
 
 print(sums(arr))
