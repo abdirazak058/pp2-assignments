@@ -4,7 +4,7 @@
 aa = input()
 letters = ["A", "E", "I", "O", "U"," a", "e", "i", "o", "u"]
 
-check = any(i in letters for i in aa) # any(Тізім)! Тізімніңішінде бір TRUE болса опши TRUE болып кайтады!
+check = any(i in letters for i in aa) # any(Тізім)! Тізімнің ішінде бір TRUE болса опши TRUE болып кайтады!
 
 if check:
     print("Yes")
