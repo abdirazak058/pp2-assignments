@@ -5,6 +5,6 @@ import re
 
 sentence = input()
 
-words = re.findall(r"\w+" , sentence)
+words = re.findall(r"\w+" , sentence) 
 
 print(len(words))

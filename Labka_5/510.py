@@ -5,7 +5,7 @@ import re
 
 sentence = input()
 
-check = re.search(r"cat|dog" , sentence)
+check = re.search(r"cat|dog & Cat|Dog" , sentence)
 #print(check)
 
 if check:

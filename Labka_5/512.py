@@ -4,6 +4,5 @@ import re
 
 word = input()
 
-digits = re.findall(r"\d{2,}", word)
-
+digits = re.findall(r"\d{2,}", word) 
 print(*digits)
