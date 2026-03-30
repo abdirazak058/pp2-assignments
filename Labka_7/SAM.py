@@ -224,7 +224,7 @@ while True:
         infor_search(conn)
     
     elif function_number == "0":
-        print("Thank you! Function stopped!")
+        print("Thank you! Function toktatyldu!")
         break
     
     else:
