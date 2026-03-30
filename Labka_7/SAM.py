@@ -114,41 +114,119 @@ def infor_delete(conn):
 def infor_show(conn):
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM Book ;")
+    cur.execute("SELECT * FROM Book ORDER BY id;")
     rows = cur.fetchall()
 
     print("All information!")
-
+    print("                ")
+    print(f"{'ID':<5} {'Name':<10} {'Phone':<20} {'Operator':<10} {'Region':<10}")
+    print("-" * 60)
     for row in rows:
-        print(row)
+        print(f"{row[0]:<5} {row[1]:<10} {row[2]:<20} {row[3]:<10} {row[4]:<10}")
     
     cur.close
+
+
+def infor_search(conn):
+    cur = conn.cursor()
+
+    print("Search information")
+    print("1 - ID")
+    print("2 - Name")
+    print("3 - Phone")
+    print("4 - Operator")
+    print("5 - Region")
+
+    tanday = input("input information: ")
+    
+    
+    if tanday == "1":
+        search_ID = int(input("ID: "))
+        cur.execute(
+            "SELECT * FROM Book WHERE ID = %s",
+            (search_ID, )
+        )
+                
+    elif tanday == "2":
+        search_name = input("Name: ")
+        cur.execute(
+            "SELECT * FROM Book WHERE name ILIKE %s",
+            ('%' + search_name + '%',)
+        )
+        
+    elif tanday == "3":
+        search_phone = input("Phone: ")
+        cur.execute(
+            "SELECT * FROM Book WHERE phone ILIKE %s",
+            ('%' + search_phone + '%',)
+        )
+            
+    elif tanday == "4":
+        search_operator = input("Operator: ")
+        cur.execute(
+            "SELECT * FROM Book WHERE operator ILIKE %s",
+            ('%' + search_operator + '%',)
+        )
+        
+    elif tanday == "5":
+        search_region = input("Region: ")
+        cur.execute(
+            "SELECT * FROM Book WHERE region ILIKE %s",
+            ('%' + search_region + '%',)
+        )
+                
+    else:
+        print("ERROR")
+        cur.close()
+        return
+    
+    rows = cur.fetchall()
+
+    if not rows:
+        print("Esh narse jok!")
+    else:
+        print(f"{'ID':<5} {'Name':<10} {'Phone':<20} {'Operator':<10} {'Region':<10}")
+        print("-" * 60)
+        for row in rows:
+            print(f"{row[0]:<5} {row[1]:<10} {row[2]:<20} {row[3]:<10} {row[4]:<10}")
+    
+    cur.close()
+
 
 
 conn = connect_db()
 
 while True:
-
+    print("             ")
     print("----MENU----")
     print("1 - Information Add!")
     print("2 - Information Update!")
     print("3 - Information Delete!")
     print("4 - Information Show!")
+    print("5 - Information Search")
     print("0 - EXIT!")
 
     function_number = input("Number fuction: ")
 
     if function_number == "1":
         infor_add(conn)
+    
     elif function_number == "2":
         infor_update(conn)
+    
     elif function_number == "3":
         infor_delete(conn)
+    
     elif function_number == "4":
         infor_show(conn)
+    
+    elif function_number == "5":
+        infor_search(conn)
+    
     elif function_number == "0":
         print("Thank you! Function stopped!")
         break
+    
     else:
         print("Error for number!")
 
