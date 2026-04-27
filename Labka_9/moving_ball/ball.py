@@ -11,7 +11,7 @@ class Ball:
         self.y = height // 2
 
         self.speed = 20
-        self.color = (255, 0, 0)
+        self.color = (255, 255, 0)
 
     def move(self, keys):
         if keys[pygame.K_LEFT]:

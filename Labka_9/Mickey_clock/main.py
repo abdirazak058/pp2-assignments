@@ -6,7 +6,7 @@ pygame.init()
 
 WIDTH, HEIGHT = 700, 600
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Mickey Clock")
+pygame.display.set_caption("Mickey Сагат")
 
 clock = pygame.time.Clock()
 

@@ -41,7 +41,7 @@ while running:
     text1 = font.render(f"Track: {track_name}", True, (255, 255, 255))
     text2 = font.render(f"Status: {status}", True, (200, 200, 200))
     text3 = font.render(time_text, True, (180, 180, 180))
-    text4 = font.render("R=Resume P=Pause N=Next B=Back Q=Quit", True, (150, 150, 150))
+    text4 = font.render("R=Resume P=Pause N=Next B=Back Q=Quit", True, (255, 0, 255))
 
     screen.blit(text1, (20, 40))
     screen.blit(text2, (20, 90))
