@@ -1,221 +1,371 @@
-import pygame, sys, random
-from config import *
-from game import SnakeGame, _t
-from db import init_db, save_session, get_leaderboard, get_personal_best
-from settings_manager import load_settings, save_settings
+import pygame
+import sys
+import random
+import json
+import os
+import psycopg2
 
 pygame.init()
-SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("TSIS 4 — Snake Game")
-CLOCK = pygame.time.Clock()
 
-FONT_TITLE = pygame.font.SysFont("arial",44,bold=True)
-FONT_BIG   = pygame.font.SysFont("arial",32,bold=True)
-FONT_MED   = pygame.font.SysFont("arial",24,bold=True)
-FONT_SMALL = pygame.font.SysFont("arial",18)
-FONT_TINY  = pygame.font.SysFont("arial",15)
+CELL_SIZE = 20
+GRID_WIDTH = 30
+GRID_HEIGHT = 20
+WIDTH = CELL_SIZE * GRID_WIDTH
+HEIGHT = CELL_SIZE * GRID_HEIGHT
 
-S_MENU="MENU"; S_USERNAME="USERNAME"; S_PLAYING="PLAYING"
-S_GAME_OVER="GAME_OVER"; S_LEADERBOARD="LEADERBOARD"; S_SETTINGS="SETTINGS"
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+GOLD = (255, 215, 0)
+DARK_RED = (139, 0, 0)
+CYAN = (0, 255, 255)
+PURPLE = (128, 0, 128)
+GRAY = (100, 100, 100)
 
-DB_OK = init_db()
+DISPLAYSURF = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Advanced Snake")
+clock = pygame.time.Clock()
+font = pygame.font.SysFont("Verdana", 24)
 
-class Button:
-    def __init__(self,x,y,w,h,text,bg=(80,80,80),hover=(130,130,130),fg=WHITE):
-        self.rect=pygame.Rect(x,y,w,h)
-        self.text,self.bg,self.hover,self.fg=text,bg,hover,fg
-    def draw(self,surf):
-        mx,my=pygame.mouse.get_pos()
-        col=self.hover if self.rect.collidepoint(mx,my) else self.bg
-        pygame.draw.rect(surf,col,self.rect,border_radius=12)
-        pygame.draw.rect(surf,WHITE,self.rect,2,border_radius=12)
-        img=FONT_SMALL.render(self.text,True,self.fg)
-        surf.blit(img,img.get_rect(center=self.rect.center))
-    def clicked(self,event):
-        return event.type==pygame.MOUSEBUTTONDOWN and event.button==1 and self.rect.collidepoint(event.pos)
+SETTINGS_FILE = "settings.json"
 
-class App:
+def get_db():
+    return psycopg2.connect("dbname=TSIS4 user=postgres password='9495082020' host=127.0.0.1 port=5432")
+
+def ensure_db_schema():
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS snake_players (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS snake_sessions (
+                id SERIAL PRIMARY KEY,
+                player_id INTEGER REFERENCES snake_players(id),
+                score INTEGER NOT NULL,
+                level_reached INTEGER NOT NULL,
+                played_at TIMESTAMP DEFAULT NOW()
+            );
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("DB Ensure Error:", e)
+
+ensure_db_schema()
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, 'r') as f:
+            return json.load(f)
+    return {"color": "GREEN", "grid": True}
+
+def save_settings(s):
+    with open(SETTINGS_FILE, 'w') as f:
+        json.dump(s, f)
+
+settings = load_settings()
+COLORS = {"GREEN": GREEN, "BLUE": BLUE, "WHITE": WHITE}
+
+class Snake:
     def __init__(self):
-        self.state=S_MENU; self.settings=load_settings()
-        self.username=""; self.typing=""
-        self.snake_game=None; self.personal_best=0
-        self.last_score=0; self.last_level=1; self.last_reason=""
-        self.session_saved=False; self.snake_timer=0
-        self._build_buttons()
+        self.body = [(10, 10), (9, 10), (8, 10)]
+        self.direction = (1, 0)
+        self.grow = 0
+        self.color = COLORS.get(settings["color"], GREEN)
+        
+    def update(self):
+        head_x, head_y = self.body[0]
+        dx, dy = self.direction
+        new_head = (head_x + dx, head_y + dy)
+        self.body.insert(0, new_head)
+        if self.grow > 0:
+            self.grow -= 1
+        elif self.grow < 0:
+            if len(self.body) > 2:
+                self.body.pop()
+            self.grow += 1
+        else:
+            self.body.pop()
+            
+    def draw(self, surface):
+        for segment in self.body:
+            rect = pygame.Rect(segment[0]*CELL_SIZE, segment[1]*CELL_SIZE, CELL_SIZE, CELL_SIZE)
+            pygame.draw.rect(surface, self.color, rect)
 
-    def _build_buttons(self):
-        cx=WIDTH//2
-        self.btn_play  =Button(cx-110,290,220,55,"Play")
-        self.btn_lb    =Button(cx-110,360,220,55,"Leaderboard")
-        self.btn_set   =Button(cx-110,430,220,55,"Settings")
-        self.btn_quit  =Button(cx-110,500,220,55,"Quit")
-        self.btn_back  =Button(20,20,110,44,"Back")
-        self.btn_retry =Button(cx-110,440,220,55,"Retry")
-        self.btn_menu  =Button(cx-110,510,220,55,"Main Menu")
-        self.btn_grid  =Button(cx-110,240,220,48,"")
-        self.btn_sound =Button(cx-110,310,220,48,"")
-        self.btn_color =Button(cx-110,380,220,48,"")
-        self.btn_save  =Button(cx-110,470,220,52,"Save & Back")
-        self._color_opts=[[80,200,80],[80,140,255],[240,200,60],[220,80,80],[200,100,255]]
-        self._color_names=["Green","Blue","Yellow","Red","Purple"]
-        self._color_idx=0
-        for i,c in enumerate(self._color_opts):
-            if c==self.settings["snake_color"]: self._color_idx=i; break
-
-    def run(self):
+class Food:
+    def __init__(self, snake_body, is_poison=False):
+        self.position = (0,0)
+        self.is_poison = is_poison
+        self.timer = 50 if not is_poison else 100
+        self.randomize_position(snake_body)
+        
+    def randomize_position(self, snake_body):
         while True:
-            dt=CLOCK.tick(60)
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT: pygame.quit(); sys.exit()
-                if self.state==S_MENU:        self._ev_menu(event)
-                elif self.state==S_USERNAME:  self._ev_username(event)
-                elif self.state==S_PLAYING:   self._ev_playing(event)
-                elif self.state==S_GAME_OVER: self._ev_gameover(event)
-                elif self.state==S_LEADERBOARD:
-                    if self.btn_back.clicked(event): self.state=S_MENU
-                elif self.state==S_SETTINGS:  self._ev_settings(event)
-            self._update(dt); self._draw()
+            pos = (random.randint(0, GRID_WIDTH-1), random.randint(0, GRID_HEIGHT-1))
+            if pos not in snake_body:
+                self.position = pos
+                break
+        if not self.is_poison:
+            self.weight = random.choice([1, 1, 3, 5])
+            if self.weight == 1: self.color = RED
+            elif self.weight == 3: self.color = BLUE
+            else: self.color = GOLD
+        else:
+            self.color = DARK_RED
+            self.weight = 0
+                
+    def update(self, snake_body):
+        self.timer -= 1
+        if self.timer <= 0:
+            self.randomize_position(snake_body)
+            self.timer = 50 if not self.is_poison else 100
 
-    def _ev_menu(self,ev):
-        if self.btn_play.clicked(ev):  self.state=S_USERNAME; self.typing=self.username
-        elif self.btn_lb.clicked(ev):  self.state=S_LEADERBOARD
-        elif self.btn_set.clicked(ev): self.state=S_SETTINGS
-        elif self.btn_quit.clicked(ev):pygame.quit();sys.exit()
+    def draw(self, surface):
+        pygame.draw.rect(surface, self.color, pygame.Rect(self.position[0]*CELL_SIZE, self.position[1]*CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
-    def _ev_username(self,ev):
-        if self.btn_back.clicked(ev): self.state=S_MENU
-        if ev.type==pygame.KEYDOWN:
-            if ev.key==pygame.K_RETURN:
-                self.username=self.typing.strip() or "Player"; self._start_game()
-            elif ev.key==pygame.K_BACKSPACE: self.typing=self.typing[:-1]
-            elif ev.unicode.isprintable() and len(self.typing)<16: self.typing+=ev.unicode
+class PowerUp:
+    def __init__(self, snake_body):
+        self.position = (0,0)
+        self.type = random.choice(["speed", "slow", "shield"])
+        self.color = CYAN if self.type == "speed" else PURPLE if self.type == "slow" else WHITE
+        self.spawn_time = pygame.time.get_ticks()
+        while True:
+            pos = (random.randint(0, GRID_WIDTH-1), random.randint(0, GRID_HEIGHT-1))
+            if pos not in snake_body:
+                self.position = pos
+                break
+    def draw(self, surface):
+        if pygame.time.get_ticks() - self.spawn_time < 8000:
+            pygame.draw.rect(surface, self.color, pygame.Rect(self.position[0]*CELL_SIZE, self.position[1]*CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
-    def _ev_playing(self,ev):
-        if ev.type==pygame.KEYDOWN:
-            k=ev.key
-            if k==pygame.K_ESCAPE: self.state=S_MENU
-            elif k in(pygame.K_UP,   pygame.K_w): self.snake_game.change_direction("UP")
-            elif k in(pygame.K_DOWN, pygame.K_s): self.snake_game.change_direction("DOWN")
-            elif k in(pygame.K_LEFT, pygame.K_a): self.snake_game.change_direction("LEFT")
-            elif k in(pygame.K_RIGHT,pygame.K_d): self.snake_game.change_direction("RIGHT")
+def play_game(username):
+    snake = Snake()
+    foods = [Food(snake.body), Food(snake.body, is_poison=True)]
+    powerup = None
+    walls = []
+    
+    score = 0
+    level = 1
+    base_fps = 8
+    
+    speed_mod = 0
+    shield_active = False
+    powerup_timer = 0
+    
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT MAX(score) FROM snake_sessions s JOIN snake_players p ON p.id = s.player_id WHERE p.username=%s", (username,))
+        res = cur.fetchone()
+        personal_best = res[0] if res and res[0] else 0
+        conn.close()
+    except:
+        personal_best = 0
 
-    def _ev_gameover(self,ev):
-        if self.btn_retry.clicked(ev): self._start_game()
-        elif self.btn_menu.clicked(ev): self.state=S_MENU
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP and snake.direction != (0, 1): snake.direction = (0, -1)
+                elif event.key == pygame.K_DOWN and snake.direction != (0, -1): snake.direction = (0, 1)
+                elif event.key == pygame.K_LEFT and snake.direction != (1, 0): snake.direction = (-1, 0)
+                elif event.key == pygame.K_RIGHT and snake.direction != (-1, 0): snake.direction = (1, 0)
+                    
+        snake.update()
+        
+        curr_time = pygame.time.get_ticks()
+        if powerup_timer and curr_time > powerup_timer:
+            speed_mod = 0
+            shield_active = False
+            powerup_timer = 0
 
-    def _ev_settings(self,ev):
-        if self.btn_grid.clicked(ev):
-            self.settings["grid_overlay"]=not self.settings["grid_overlay"]
-        elif self.btn_sound.clicked(ev):
-            self.settings["sound"]=not self.settings["sound"]
-        elif self.btn_color.clicked(ev):
-            self._color_idx=(self._color_idx+1)%len(self._color_opts)
-            self.settings["snake_color"]=self._color_opts[self._color_idx]
-        elif self.btn_save.clicked(ev): save_settings(self.settings); self.state=S_MENU
-        elif self.btn_back.clicked(ev): self.state=S_MENU
+        head_x, head_y = snake.body[0]
+        collision = False
+        
+        if head_x < 0 or head_x >= GRID_WIDTH or head_y < 0 or head_y >= GRID_HEIGHT:
+            collision = True
+        elif snake.body[0] in snake.body[1:]:
+            collision = True
+        elif snake.body[0] in walls:
+            collision = True
+            
+        if collision:
+            if shield_active:
+                shield_active = False
+                powerup_timer = 0
+                snake.body[0] = (head_x - snake.direction[0], head_y - snake.direction[1])
+            else:
+                save_score(username, score, level)
+                return score
 
-    def _start_game(self):
-        self.personal_best=get_personal_best(self.username) if DB_OK else 0
-        self.settings=load_settings()
-        self.snake_game=SnakeGame(self.settings,self.username,self.personal_best)
-        self.snake_timer=0; self.session_saved=False; self.state=S_PLAYING
+        for f in foods:
+            if snake.body[0] == f.position:
+                if f.is_poison:
+                    snake.grow = -2
+                else:
+                    snake.grow = 1
+                    score += 10 * f.weight
+                f.randomize_position(snake.body + walls)
+                
+                if score >= level * 100:
+                    level += 1
+                    base_fps += 2
+                    if level >= 3:
+                        walls = generate_walls(snake.body)
+                        
+        if len(snake.body) <= 1:
+            save_score(username, score, level)
+            return score
 
-    def _update(self,dt):
-        if self.state!=S_PLAYING or not self.snake_game: return
-        step_ms=1000//self.snake_game.current_fps
-        self.snake_timer+=dt
-        while self.snake_timer>=step_ms:
-            self.snake_timer-=step_ms; self.snake_game.update()
-        if self.snake_game.game_over and not self.session_saved:
-            self.last_score=self.snake_game.score
-            self.last_level=self.snake_game.level
-            self.last_reason=self.snake_game.game_over_reason
-            if DB_OK: save_session(self.username,self.last_score,self.last_level)
-            self.personal_best=get_personal_best(self.username) if DB_OK else self.last_score
-            self.session_saved=True; self.state=S_GAME_OVER
+        if random.random() < 0.01 and not powerup:
+            powerup = PowerUp(snake.body + walls)
+            
+        if powerup:
+            if curr_time - powerup.spawn_time > 8000:
+                powerup = None
+            elif snake.body[0] == powerup.position:
+                if powerup.type == "speed": speed_mod = 5
+                elif powerup.type == "slow": speed_mod = -3
+                elif powerup.type == "shield": shield_active = True
+                powerup_timer = curr_time + 5000
+                powerup = None
 
-    def _draw(self):
-        SCREEN.fill(BG)
-        if self.state==S_MENU:         self._draw_menu()
-        elif self.state==S_USERNAME:   self._draw_username()
-        elif self.state==S_PLAYING:    self._draw_playing()
-        elif self.state==S_GAME_OVER:  self._draw_gameover()
-        elif self.state==S_LEADERBOARD:self._draw_leaderboard()
-        elif self.state==S_SETTINGS:   self._draw_settings()
+        for f in foods: f.update(snake.body)
+        
+        DISPLAYSURF.fill(BLACK)
+        if settings.get("grid", True):
+            for x in range(0, WIDTH, CELL_SIZE): pygame.draw.line(DISPLAYSURF, (30,30,30), (x,0), (x,HEIGHT))
+            for y in range(0, HEIGHT, CELL_SIZE): pygame.draw.line(DISPLAYSURF, (30,30,30), (0,y), (WIDTH,y))
+
+        for w in walls:
+            pygame.draw.rect(DISPLAYSURF, GRAY, pygame.Rect(w[0]*CELL_SIZE, w[1]*CELL_SIZE, CELL_SIZE, CELL_SIZE))
+
+        snake.draw(DISPLAYSURF)
+        for f in foods: f.draw(DISPLAYSURF)
+        if powerup: powerup.draw(DISPLAYSURF)
+        
+        score_txt = font.render(f"Score: {score} | Best: {personal_best} | Level: {level}", True, WHITE)
+        DISPLAYSURF.blit(score_txt, (10, 10))
+        
+        pygame.display.update()
+        clock.tick(max(3, base_fps + speed_mod))
+
+def generate_walls(snake_body):
+    walls = []
+    for _ in range(10):
+        pos = (random.randint(0, GRID_WIDTH-1), random.randint(0, GRID_HEIGHT-1))
+        hx, hy = snake_body[0]
+        if abs(pos[0]-hx) > 3 and abs(pos[1]-hy) > 3 and pos not in snake_body:
+            if pos not in walls:
+                walls.append(pos)
+    return walls
+
+def save_score(username, score, level):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO snake_players(username) VALUES(%s) ON CONFLICT DO NOTHING", (username,))
+        cur.execute("SELECT id FROM snake_players WHERE username=%s", (username,))
+        pid_row = cur.fetchone()
+        if pid_row:
+            pid = pid_row[0]
+            cur.execute("INSERT INTO snake_sessions(player_id, score, level_reached) VALUES(%s, %s, %s)", (pid, score, level))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print("Failed to save to DB:", e)
+
+def show_leaderboard():
+    while True:
+        DISPLAYSURF.fill(BLACK)
+        title = font.render("Top 10 Scores (DB)", True, WHITE)
+        DISPLAYSURF.blit(title, (WIDTH//2 - title.get_width()//2, 30))
+        
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT p.username, s.score, s.level_reached FROM snake_sessions s JOIN snake_players p ON p.id = s.player_id ORDER BY s.score DESC LIMIT 10")
+            rows = cur.fetchall()
+            for i, r in enumerate(rows):
+                txt = font.render(f"{i+1}. {r[0]} - Score: {r[1]} - Lvl: {r[2]}", True, WHITE)
+                DISPLAYSURF.blit(txt, (50, 100 + i*30))
+            conn.close()
+        except:
+            txt = font.render("No DB connection", True, RED)
+            DISPLAYSURF.blit(txt, (50, 100))
+
+        back = font.render("Press ESC to return", True, RED)
+        DISPLAYSURF.blit(back, (WIDTH//2 - back.get_width()//2, HEIGHT-50))
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: sys.exit()
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE: return
+
+def show_settings():
+    global settings
+    while True:
+        DISPLAYSURF.fill(BLACK)
+        title = font.render("Settings", True, WHITE)
+        DISPLAYSURF.blit(title, (WIDTH//2 - title.get_width()//2, 30))
+        
+        c_txt = font.render(f"1. Color: {settings['color']}", True, WHITE)
+        g_txt = font.render(f"2. Grid: {'ON' if settings['grid'] else 'OFF'}", True, WHITE)
+        back = font.render("Press ESC to return", True, RED)
+        
+        DISPLAYSURF.blit(c_txt, (50, 150))
+        DISPLAYSURF.blit(g_txt, (50, 200))
+        DISPLAYSURF.blit(back, (WIDTH//2 - back.get_width()//2, HEIGHT-50))
         pygame.display.flip()
 
-    def _draw_menu(self):
-        cx=WIDTH//2
-        _t(FONT_TITLE,"SNAKE GAME",WHITE,SCREEN,cx,100,center=True)
-        _t(FONT_SMALL,"TSIS 4",(160,160,160),SCREEN,cx,160,center=True)
-        if not DB_OK:
-            _t(FONT_TINY,"DB offline — scores won't be saved",(200,80,80),SCREEN,cx,210,center=True)
-        self.btn_play.draw(SCREEN); self.btn_lb.draw(SCREEN)
-        self.btn_set.draw(SCREEN);  self.btn_quit.draw(SCREEN)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    opts = list(COLORS.keys())
+                    settings["color"] = opts[(opts.index(settings["color"]) + 1) % len(opts)]
+                if event.key == pygame.K_2:
+                    settings["grid"] = not settings["grid"]
+                if event.key == pygame.K_ESCAPE:
+                    save_settings(settings)
+                    return
 
-    def _draw_username(self):
-        cx=WIDTH//2
-        _t(FONT_BIG,"Enter Username",WHITE,SCREEN,cx,180,center=True)
-        box=pygame.Rect(cx-160,280,320,56)
-        pygame.draw.rect(SCREEN,WHITE,box,border_radius=10)
-        pygame.draw.rect(SCREEN,BLACK,box.inflate(-4,-4),border_radius=10)
-        _t(FONT_SMALL,self.typing or "Type your name...",
-           WHITE if self.typing else GRAY,SCREEN,box.x+12,box.y+15)
-        _t(FONT_SMALL,"Press ENTER to start",LIGHT_GRAY,SCREEN,cx,380,center=True)
-        self.btn_back.draw(SCREEN)
+def main_menu():
+    username = "Player"
+    while True:
+        DISPLAYSURF.fill(BLACK)
+        title = font.render("Advanced Snake", True, WHITE)
+        DISPLAYSURF.blit(title, (WIDTH//2 - title.get_width()//2, 100))
+        
+        p = font.render("1. Play", True, WHITE)
+        l = font.render("2. Leaderboard", True, WHITE)
+        s = font.render("3. Settings", True, WHITE)
+        q = font.render("4. Quit", True, WHITE)
+        u_instr = font.render(f"User: {username} (Press U to change)", True, BLUE)
+        
+        for i, t in enumerate([p, l, s, q, u_instr]):
+            DISPLAYSURF.blit(t, (WIDTH//2 - t.get_width()//2, 200 + i*40))
+            
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1: play_game(username)
+                elif event.key == pygame.K_2: show_leaderboard()
+                elif event.key == pygame.K_3: show_settings()
+                elif event.key == pygame.K_4: sys.exit()
+                elif event.key == pygame.K_u: 
+                    print("Enter name in terminal:")
+                    username = input("Username: ")
 
-    def _draw_playing(self):
-        if self.snake_game:
-            self.snake_game.draw(SCREEN)
-            self.snake_game.draw_hud(SCREEN,FONT_MED,FONT_SMALL)
-
-    def _draw_gameover(self):
-        cx=WIDTH//2
-        _t(FONT_TITLE,"GAME OVER",(220,60,60),SCREEN,cx,130,center=True)
-        _t(FONT_SMALL,self.last_reason,LIGHT_GRAY,SCREEN,cx,195,center=True)
-        _t(FONT_MED,f"Score: {self.last_score}",WHITE,SCREEN,cx,240,center=True)
-        _t(FONT_SMALL,f"Level reached: {self.last_level}",LIGHT_GRAY,SCREEN,cx,290,center=True)
-        _t(FONT_SMALL,f"Personal best: {self.personal_best}",YELLOW,SCREEN,cx,325,center=True)
-        self.btn_retry.draw(SCREEN); self.btn_menu.draw(SCREEN)
-
-    def _draw_leaderboard(self):
-        cx=WIDTH//2
-        _t(FONT_BIG,"Top 10 Leaderboard",WHITE,SCREEN,cx,60,center=True)
-        if not DB_OK:
-            _t(FONT_SMALL,"Database is offline",(200,80,80),SCREEN,cx,HEIGHT//2,center=True)
-            self.btn_back.draw(SCREEN); return
-        data=get_leaderboard(10)
-        xs=[28,70,270,360,430]
-        for i,(h,c) in enumerate(zip(["#","Name","Score","Lvl","Date"],[YELLOW]*5)):
-            _t(FONT_SMALL,h,c,SCREEN,xs[i],120)
-        y=158
-        if not data:
-            _t(FONT_SMALL,"No scores yet!",LIGHT_GRAY,SCREEN,cx,300,center=True)
-        else:
-            for rank,uname,score,level,played_at in data:
-                ds=played_at.strftime("%m/%d %H:%M") if played_at else "-"
-                _t(FONT_SMALL,str(rank),WHITE,SCREEN,xs[0],y)
-                _t(FONT_SMALL,uname[:14],WHITE,SCREEN,xs[1],y)
-                _t(FONT_SMALL,str(score),WHITE,SCREEN,xs[2],y)
-                _t(FONT_SMALL,str(level),LIGHT_GRAY,SCREEN,xs[3],y)
-                _t(FONT_TINY,ds,LIGHT_GRAY,SCREEN,xs[4],y+2)
-                y+=44
-        self.btn_back.draw(SCREEN)
-
-    def _draw_settings(self):
-        cx=WIDTH//2
-        _t(FONT_BIG,"Settings",WHITE,SCREEN,cx,120,center=True)
-        self.btn_grid.text =f"Grid: {'On' if self.settings['grid_overlay'] else 'Off'}"
-        self.btn_sound.text=f"Sound: {'On' if self.settings['sound'] else 'Off'}"
-        self.btn_color.text=f"Color: {self._color_names[self._color_idx]}"
-        sc=self.settings["snake_color"]
-        self.btn_color.bg=tuple(max(c-60,20) for c in sc)
-        self.btn_grid.draw(SCREEN); self.btn_sound.draw(SCREEN)
-        self.btn_color.draw(SCREEN)
-        prev=pygame.Rect(cx-20,445,40,40)
-        pygame.draw.rect(SCREEN,tuple(sc),prev,border_radius=8)
-        pygame.draw.rect(SCREEN,WHITE,prev,2,border_radius=8)
-        self.btn_save.draw(SCREEN)
-
-if __name__=="__main__":
-    app=App(); app.run()
+if __name__ == "__main__":
+    main_menu()

@@ -212,7 +212,6 @@ def infor_delete(conn):
     choice = input("Tanda: ")
 
     if choice == "1":
-        # Алдымен адамдарды көрсету
         cur.execute("SELECT id, last_name, name FROM contacts ORDER BY id;")
         people = cur.fetchall()
 
@@ -239,7 +238,6 @@ def infor_delete(conn):
             print("Oshiru toqtady.")
 
     elif choice == "2":
-        # Алдымен адамдарды көрсету
         cur.execute("SELECT id, last_name, name FROM contacts ORDER BY id;")
         people = cur.fetchall()
 
@@ -252,7 +250,6 @@ def infor_delete(conn):
 
         person_id = input("\nAdam ID: ")
 
-        # Сол адамның барлық номерлерін шығару
         cur.execute("""
             SELECT id, phone, operator, email, birthday
             FROM contact_info
@@ -293,7 +290,6 @@ def infor_delete(conn):
 def infor_show(conn):
     cur = conn.cursor()
 
-    # 🔹 1. Алдымен тек адамдарды шығару
     cur.execute("SELECT id, last_name, name FROM contacts ORDER BY id;")
     people = cur.fetchall()
 
@@ -304,10 +300,8 @@ def infor_show(conn):
     for person in people:
         print(f"{person[0]:<5} {person[1]:<12} {person[2]:<12}")
 
-    # 🔹 2. ID таңдау
     person_id = input("\nAdam ID engiz: ")
 
-    # 🔹 3. Сол ID бойынша толық ақпарат
     cur.execute("""
         SELECT c.last_name, c.name,
                i.phone, i.operator, i.email, i.birthday
@@ -462,10 +456,8 @@ def infor_all_delete(conn):
     sure = input("Barlyq derekterdi oshiresinbe? (yes/no): ")
 
     if sure.lower() == "yes":
-        # Алдымен тәуелді кестені тазалаймыз
         cur.execute("DELETE FROM contact_info;")
 
-        # Сосын негізгі кесте
         cur.execute("DELETE FROM contacts;")
 
         conn.commit()
@@ -476,6 +468,30 @@ def infor_all_delete(conn):
 
     cur.close()
 
+def infor_limit_show(conn):
+    cur = conn.cursor()
+
+    limit = int(input("Qansha adam shygarylsyn?: "))
+
+    cur.execute("""
+        SELECT id, last_name, name
+        FROM contacts
+        ORDER BY id
+        LIMIT %s;
+    """, (limit,))
+
+    rows = cur.fetchall()
+
+    if not rows:
+        print("Derek joq!")
+    else:
+        print(f"{'ID':<5} {'Surname':<15} {'Name':<15}")
+        print("-" * 40)
+
+        for row in rows:
+            print(f"{row[0]:<5} {row[1]:<15} {row[2]:<15}")
+
+    cur.close()
 
 conn = connect_db()
 
@@ -490,6 +506,7 @@ while True:
     print("6 - Information Search")
     print("7 - Information count all DB")
     print("8 - Infromation all delete")
+    print("9 - Information limit show")
     print("0 - EXIT!")
 
     function_number = input("Number fuction: ")
@@ -530,6 +547,9 @@ while True:
         print("Thank you! Function toktatyldu!")
         break
     
+    elif function_number == "9":
+        infor_limit_show(conn)
+        
     else:
         print("Error for number!")
 
